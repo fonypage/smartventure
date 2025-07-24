@@ -21,7 +21,7 @@ public class DocumentationController {
 
     @PostMapping
     public Mono<DocumentationDto> create(@RequestBody DocumentationDto dto) {
-        return service.create(dto);
+        return service.createAndProcess(dto);
     }
 
     @PatchMapping("/{id}/scores")

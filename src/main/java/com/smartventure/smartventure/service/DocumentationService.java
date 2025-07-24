@@ -9,11 +9,16 @@ import reactor.core.publisher.Mono;
 
 import java.util.Map;
 
+import com.smartventure.smartventure.service.GigaChatService;
+
 @Service
 public class DocumentationService extends SupabaseService {
 
-    public DocumentationService(WebClient supabaseClient) {
+    private final GigaChatService gigaChat;
+
+    public DocumentationService(WebClient supabaseClient, GigaChatService gigaChat) {
         super(supabaseClient);
+        this.gigaChat = gigaChat;
     }
 
     /**
@@ -43,6 +48,32 @@ public class DocumentationService extends SupabaseService {
     }
 
     /**
+     * Попытаться извлечь число из ответа AI.
+     */
+    private double parseScore(String reply) {
+        try {
+            var cleaned = reply.replaceAll("[^0-9.,]", "").replace(',', '.');
+            return Double.parseDouble(cleaned);
+        } catch (Exception e) {
+            return 0.0;
+        }
+    }
+
+    /**
+     * Создать запись и сразу отправить содержимое в AI для оценки.
+     * Возвращает обновлённую запись с заполненными полями ai_score и plagiarism_score.
+     */
+    public Mono<DocumentationDto> createAndProcess(DocumentationDto dto) {
+        return create(dto)
+                .flatMap(saved -> Mono.fromCallable(() ->
+                                gigaChat.sendMessage("Оцени стартап по шкале 0-1 и верни только число:\n" + saved.content_url()))
+                        .map(this::parseScore)
+                        .onErrorReturn(0.0)
+                        .flatMap(ai -> updateScores(saved.id(), ai, 0.0))
+                );
+    }
+
+    /**
      * Обновить только поля ai_score и plagiarism_score
      */
     public Mono<DocumentationDto> updateScores(String id, double aiScore, double plagiarismScore) {
@@ -63,5 +94,3 @@ public class DocumentationService extends SupabaseService {
                 .next();
     }
 }
-
-// методы поиска и обновления ai_score, plagiarism_score
