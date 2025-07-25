@@ -2,7 +2,10 @@ package com.smartventure.smartventure.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import okhttp3.*;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
 
+@Service
 public class GigaChatService {
     private static final String CHAT_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions";
     private final OkHttpClient client;
@@ -41,5 +44,27 @@ public class GigaChatService {
                     .path("message").path("content")
                     .asText();
         }
+    }
+
+    /** Попытаться извлечь число из ответа AI. */
+    private double parseScore(String reply) {
+        try {
+            var cleaned = reply.replaceAll("[^0-9.,]", "")
+                    .replace(',', '.');
+            return Double.parseDouble(cleaned);
+        } catch (Exception e) {
+            return 0.0;
+        }
+    }
+
+    /**
+     * Отправляет документ в GigaChat и возвращает преобразованный ai_score.
+     */
+    public Mono<Double> analyze(String documentText) {
+        return Mono.fromCallable(() -> sendMessage(
+                        "Проанализируй этот текст и верни ai_score от 0 до 1:\n\n"
+                                + documentText))
+                .map(this::parseScore)
+                .onErrorReturn(0.0);
     }
 }
