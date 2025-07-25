@@ -2,15 +2,20 @@ package com.smartventure.smartventure.service;
 
 
 import com.smartventure.smartventure.dto.DocumentationDto;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.util.Map;
 
 import com.smartventure.smartventure.service.GigaChatService;
-
+@Slf4j
 @Service
 public class DocumentationService extends SupabaseService {
 
@@ -40,7 +45,11 @@ public class DocumentationService extends SupabaseService {
      */
     public Mono<DocumentationDto> create(DocumentationDto dto) {
         return client.post()
-                .uri("/documentation")
+                .uri(uri -> uri
+                        .path("/documentation")
+                        .queryParam("select", "*")
+                        .build())
+                .header("Prefer", "return=representation")
                 .bodyValue(dto)
                 .retrieve()
                 .bodyToFlux(DocumentationDto.class)
@@ -65,32 +74,71 @@ public class DocumentationService extends SupabaseService {
      */
     public Mono<DocumentationDto> createAndProcess(DocumentationDto dto) {
         return create(dto)
-                .flatMap(saved -> Mono.fromCallable(() ->
-                                gigaChat.sendMessage("Оцени стартап по шкале 0-1 и верни только число:\n" + saved.content_url()))
-                        .map(this::parseScore)
-                        .onErrorReturn(0.0)
-                        .flatMap(ai -> updateScores(saved.id(), ai, 0.0))
-                );
+                .flatMap(saved -> {
+                    log.info("▶ Created doc: id={} url={}", saved.id(), saved.content_url());
+
+                    return downloadPdfText(saved.content_url())
+                            .flatMap(text -> {
+                                log.debug("✂ Extracted {} chars of text", text.length());
+                                return gigaChat.analyze(text);
+                            })
+                            .flatMap(aiScore -> {
+                                log.info("🤖 GigaChat returned ai_score={}", aiScore);
+                                return updateScores(saved.id(), aiScore, 0.0);
+                            })
+                            .onErrorResume(e -> {
+                                log.error("❌ Error processing doc id={}: {}", saved.id(), e.getMessage());
+                                return Mono.just(saved);
+                            });
+                });
+    }
+
+
+    private Mono<String> downloadPdfText(String url) {
+        return WebClient.create()
+                .get().uri(url)
+                .retrieve()
+                .bodyToMono(ByteArrayResource.class)
+                .flatMap(resource -> {
+                    byte[] data = resource.getByteArray();
+                    try (ByteArrayInputStream is = new ByteArrayInputStream(data);
+                         PDDocument pdf = PDDocument.load(is)) {
+                        String text = new PDFTextStripper().getText(pdf);
+                        return Mono.just(text);
+                    } catch (IOException e) {
+                        return Mono.error(new RuntimeException("Не удалось прочитать PDF по URL: " + url, e));
+                    }
+                });
     }
 
     /**
      * Обновить только поля ai_score и plagiarism_score
      */
     public Mono<DocumentationDto> updateScores(String id, double aiScore, double plagiarismScore) {
-        // формируем JSON-объект { "ai_score": ..., "plagiarism_score": ... }
         Map<String,Object> patchBody = Map.of(
-                "ai_score",          aiScore,
-                "plagiarism_score",  plagiarismScore
+                "ai_score",         aiScore,
+                "plagiarism_score", plagiarismScore
         );
         return client.patch()
                 .uri(uri -> uri
                         .path("/documentation")
-                        .queryParam("select", "*")   // возвращаем обновлённую запись
-                        .queryParam("id",     "eq." + id)
+                        .queryParam("id", "eq." + id)
+                        .queryParam("select", "*")
                         .build())
+                .header("Prefer", "return=representation")
                 .bodyValue(patchBody)
                 .retrieve()
                 .bodyToFlux(DocumentationDto.class)
                 .next();
+    }
+
+    public Flux<DocumentationDto> findAll() {
+        return client.get()
+                .uri(uri -> uri
+                        .path("/documentation")
+                        .queryParam("select", "*")
+                        .build())
+                .retrieve()
+                .bodyToFlux(DocumentationDto.class);
     }
 }

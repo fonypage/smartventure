@@ -19,6 +19,11 @@ public class DocumentationController {
         return service.findByStartup(startupId);
     }
 
+    @GetMapping
+    public Flux<DocumentationDto> all() {
+        return service.findAll();
+    }
+
     @PostMapping
     public Mono<DocumentationDto> create(@RequestBody DocumentationDto dto) {
         return service.createAndProcess(dto);
