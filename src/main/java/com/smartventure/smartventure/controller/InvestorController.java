@@ -1,6 +1,7 @@
 package com.smartventure.smartventure.controller;
 
 import com.smartventure.smartventure.dto.InvestorDto;
+import com.smartventure.smartventure.dto.InvestorInsert;
 import com.smartventure.smartventure.service.InvestorService;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -18,7 +19,7 @@ public class InvestorController {
     }
 
     @PostMapping
-    public Mono<InvestorDto> create(@RequestBody InvestorDto dto) {
+    public Mono<InvestorDto> create(@RequestBody InvestorInsert dto) {
         return service.create(dto);
     }
 }
