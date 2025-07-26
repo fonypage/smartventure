@@ -1,7 +1,9 @@
 package com.smartventure.smartventure.controller;
 
 import com.smartventure.smartventure.dto.DocumentationDto;
+import com.smartventure.smartventure.dto.DocumentationInsertDto;
 import com.smartventure.smartventure.service.DocumentationService;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -25,8 +27,9 @@ public class DocumentationController {
     }
 
     @PostMapping
-    public Mono<DocumentationDto> create(@RequestBody DocumentationDto dto) {
-        return service.createAndProcess(dto);
+    @Operation(summary = "Добавить документацию к стартапу")
+    public Mono<DocumentationDto> create(@RequestBody DocumentationInsertDto insertDto) {
+        return service.createAndProcess(insertDto);
     }
 
     @PatchMapping("/{id}/scores")

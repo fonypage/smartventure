@@ -2,6 +2,7 @@ package com.smartventure.smartventure.service;
 
 
 import com.smartventure.smartventure.dto.DocumentationDto;
+import com.smartventure.smartventure.dto.DocumentationInsertDto;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -43,7 +44,7 @@ public class DocumentationService extends SupabaseService {
     /**
      * Создать новую запись документации (до обработки AI)
      */
-    public Mono<DocumentationDto> create(DocumentationDto dto) {
+    public Mono<DocumentationDto> create(DocumentationInsertDto  dto) {
         return client.post()
                 .uri(uri -> uri
                         .path("/documentation")
@@ -72,25 +73,14 @@ public class DocumentationService extends SupabaseService {
      * Создать запись и сразу отправить содержимое в AI для оценки.
      * Возвращает обновлённую запись с заполненными полями ai_score и plagiarism_score.
      */
-    public Mono<DocumentationDto> createAndProcess(DocumentationDto dto) {
+    public Mono<DocumentationDto> createAndProcess(DocumentationInsertDto dto) {
         return create(dto)
-                .flatMap(saved -> {
-                    log.info("▶ Created doc: id={} url={}", saved.id(), saved.content_url());
-
-                    return downloadPdfText(saved.content_url())
-                            .flatMap(text -> {
-                                log.debug("✂ Extracted {} chars of text", text.length());
-                                return gigaChat.analyze(text);
-                            })
-                            .flatMap(aiScore -> {
-                                log.info("🤖 GigaChat returned ai_score={}", aiScore);
-                                return updateScores(saved.id(), aiScore, 0.0);
-                            })
-                            .onErrorResume(e -> {
-                                log.error("❌ Error processing doc id={}: {}", saved.id(), e.getMessage());
-                                return Mono.just(saved);
-                            });
-                });
+                .flatMap(saved ->
+                        downloadPdfText(saved.content_url())
+                                .flatMap(text -> gigaChat.analyze(text))
+                                .flatMap(aiScore -> updateScores(saved.id(), aiScore, 0.0))
+                                .onErrorResume(e -> Mono.just(saved))
+                );
     }
 
 
