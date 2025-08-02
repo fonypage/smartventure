@@ -3,12 +3,14 @@ package com.smartventure.smartventure.controller;
 import com.smartventure.smartventure.dto.StartupDto;
 import com.smartventure.smartventure.dto.StartupInsert;
 import com.smartventure.smartventure.service.StartupService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/api/v1/startups")
+@SecurityRequirement(name = "bearerAuth")
 public class StartupController {
     private final StartupService service;
     public StartupController(StartupService service) { this.service = service; }
